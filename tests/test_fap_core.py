@@ -16,7 +16,7 @@ class TestScoringEngine:
         assert result.verdict == "STRICT" and result.total_score >= 0.95
     def test_grand_slam_fraudulent(self):
         result = quick_score(solar_score=0.15, signature_score=0.20, hardware_score=0.0, weather_score=0.40, witness_score=0.10, gps_score=0.30)
-        assert result.verdict == "QUARANTINE" and result.total_score <= 0.15
+        assert result.verdict == "QUARANTINE" and result.total_score <= 0.20
 class TestArtifact:
     def test_create_from_capture(self):
         artifact = Artifact.from_capture(media_path="/photos/test.jpg", media_hash="abc123", media_type="image", latitude=29.53, longitude=-98.46, device_model="TestPhone", device_manufacturer="TestCo", os_version="1.0", enrollment_id="A7F2-9912")

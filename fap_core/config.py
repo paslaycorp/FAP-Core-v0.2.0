@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 @dataclass
 class ScoringConfig:
     weight_solar=0.30; weight_signature=0.20; weight_hardware=0.15
@@ -9,5 +9,5 @@ class ScoringConfig:
     threshold_suspicious=0.40; threshold_quarantine=0.0
 @dataclass
 class Config:
-    scoring: ScoringConfig = ScoringConfig()
+    scoring: ScoringConfig = field(default_factory=ScoringConfig)
 settings = Config()

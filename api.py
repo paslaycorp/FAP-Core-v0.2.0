@@ -20,6 +20,19 @@ limiter = Limiter(key_func=get_remote_address)
 
 def verify_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
     return "demo-key"
+@app.get("/demo")
+async def demo():
+    l = quick_score(solar_score=1.0, signature_score=0.95, hardware_score=1.0,
+                    weather_score=0.93, witness_score=0.85, gps_score=0.90)
+    f = quick_score(solar_score=0.15, signature_score=0.20, hardware_score=0.0,
+                    weather_score=0.40, witness_score=0.10, gps_score=0.30)
+    e = quick_score(solar_score=0.65, signature_score=0.90, hardware_score=1.0,
+                    weather_score=0.78, witness_score=0.35, gps_score=0.85)
+    return {"scenarios": [
+        {"name": "Legitimate", "score": l.total_score, "verdict": l.verdict},
+        {"name": "Fraudulent", "score": f.total_score, "verdict": f.verdict},
+        {"name": "Edge", "score": e.total_score, "verdict": e.verdict},
+    ]}
 
 app = FastAPI(title="FAP-Core", version=__version__, docs_url="/docs" if FAP_ENV != "production" else None)
 app.state.limiter = limiter
@@ -32,16 +45,7 @@ async def rl_handler(request, exc):
 async def health():
     return HealthResponse(status="healthy", version=__version__, timestamp=datetime.now(timezone.utc))
 
-@app.get("/demo")
-async def demo():
-    l = quick_score(1.0, 0.95, 1.0, 0.93, 0.85, 0.90)
-    f = quick_score(0.15, 0.20, 0.0, 0.40, 0.10, 0.30)
-    e = quick_score(0.65, 0.90, 1.0, 0.78, 0.35, 0.85)
-    return {"scenarios": [
-        {"name": "Legitimate", "score": l.total_score, "verdict": l.verdict},
-        {"name": "Fraudulent", "score": f.total_score, "verdict": f.verdict},
-        {"name": "Edge", "score": e.total_score, "verdict": e.verdict},
-    ]}
+
 
 @app.post("/verify", response_model=VerifyResponse)
 @limiter.limit(FAP_RATE_LIMIT)

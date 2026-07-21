@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 class ArtifactStatus(Enum):
     CAPTURED = "captured"; ENROLLED = "enrolled"; ORACLED = "oracled"
-    SCORED = "scored"; VERIFIED = "verified"; QUARANTINED = "quarantined"; REJECTED = "rejected"
+    SCORED = "scored"; VERIFIED = "verified"; SUSPICIOUS = "suspicious"; QUARANTINED = "quarantined"; REJECTED = "rejected"
 @dataclass
 class GeoStamp:
     latitude: float; longitude: float; altitude: Optional[float] = None; accuracy: Optional[float] = None; source: str = "gps"

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: fap-core
+    runtime: docker
+    plan: free
+    envVars:
+      - key: FAP_ENV
+        value: production
+      - key: FAP_API_KEY
+        generateValue: true
+      - key: FAP_RATE_LIMIT
+        value: "100/minute"
+    healthCheckPath: /health

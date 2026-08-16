@@ -1,3 +1,19 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/paslaycorp/FAP-Core-v0.2.0/main/assets/hero-banner.png" alt="FAP — Fact-Artifact Protocol" width="900" />
+</p>
+
+<p align="center">
+  <a href="https://www.linkedin.com/in/REPLACE_WITH_YOUR_PROFILE" target="_blank">
+    <img alt="LinkedIn" src="https://img.shields.io/badge/Connect-LinkedIn-blue?logo=linkedin&logoColor=white" />
+  </a>
+  &nbsp;
+  <a href="https://github.com/paslaycorp/FAP-Core-v0.2.0">
+    <img alt="GitHub" src="https://img.shields.io/github/stars/paslaycorp/FAP-Core-v0.2.0?style=social" />
+  </a>
+  &nbsp;
+  <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-red" />
+</p>
+
 # FAP — Fact-Artifact Protocol
 ## Deepfake Prevention at the Moment of Creation
 

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -21,6 +21,51 @@ limiter = Limiter(key_func=get_remote_address)
 # app MUST be defined BEFORE any @app.route decorators
 app = FastAPI(title="FAP-Core", version=__version__, docs_url="/docs" if FAP_ENV != "production" else None)
 app.state.limiter = limiter
+
+@app.get("/")
+async def root():
+    return HTMLResponse("""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>FAP-Core | Fraud-Resistant Evidence Verification</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 60px auto; padding: 20px; background: #0a0a0a; color: #e0e0e0; }
+            h1 { color: #4ade80; font-size: 2.5em; margin-bottom: 10px; }
+            .tagline { color: #888; font-size: 1.1em; margin-bottom: 30px; }
+            .card { background: #1a1a1a; border-radius: 12px; padding: 24px; margin: 16px 0; border: 1px solid #333; }
+            .score { font-size: 2em; font-weight: bold; }
+            .strict { color: #4ade80; }
+            .quarantine { color: #ef4444; }
+            a { color: #4ade80; text-decoration: none; }
+            a:hover { text-decoration: underline; }
+            .btn { display: inline-block; background: #4ade80; color: #0a0a0a; padding: 12px 24px; border-radius: 8px; font-weight: bold; margin: 8px 8px 0 0; }
+            .btn-secondary { background: #333; color: #e0e0e0; }
+            .version { color: #666; font-size: 0.85em; margin-top: 40px; }
+        </style>
+    </head>
+    <body>
+        <h1>FAP-Core</h1>
+        <p class="tagline">Fraud-resistant provenance verification for insurance claims.</p>
+        <div class="card">
+            <p><strong>Live solar anchors.</strong> GOES-16 X-ray flux, impossible to fabricate retroactively.</p>
+            <p><strong>Real-time weather corroboration.</strong> NOAA-validated conditions at time of claim.</p>
+            <p><strong>Device fingerprinting.</strong> Enrolled hardware, not spoofable GPS.</p>
+        </div>
+        <div class="card">
+            <p><strong>Grand Slam Demo Results</strong></p>
+            <p>Legitimate claim: <span class="score strict">0.9545 STRICT</span></p>
+            <p>Fraudulent claim: <span class="score quarantine">0.1800 QUARANTINE</span></p>
+            <p>Gap: <strong>0.77</strong> — clear enough for automated decisioning.</p>
+        </div>
+        <a href="/docs" class="btn">API Documentation</a>
+        <a href="/demo" class="btn btn-secondary">Run Live Demo</a>
+        <p class="version">v0.2.0 | San Antonio, TX | Built by Patrick Paslay</p>
+    </body>
+    </html>
+    """)
+
 
 @app.exception_handler(RateLimitExceeded)
 async def rl_handler(request, exc):

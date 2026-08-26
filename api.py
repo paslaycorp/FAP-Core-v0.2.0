@@ -13,8 +13,13 @@ import os, hashlib
 from datetime import datetime, timezone
 
 FAP_ENV = os.getenv("FAP_ENV", "development")
-FAP_API_KEY = os.getenv("FAP_API_KEY", "dev-key-CHANGE-IN-PROD")
+FAP_API_KEY = os.getenv("FAP_API_KEY")
 FAP_RATE_LIMIT = os.getenv("FAP_RATE_LIMIT", "100/minute")
+
+# Validate required secrets on startup
+if FAP_ENV == "production" and not FAP_API_KEY:
+    raise ValueError("CRITICAL: FAP_API_KEY environment variable must be set in production")
+
 security = HTTPBearer(auto_error=False)
 limiter = Limiter(key_func=get_remote_address)
 
@@ -72,7 +77,25 @@ async def rl_handler(request, exc):
     return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
 
 def verify_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    return "demo-key"
+    """Validate incoming API key against environment secret."""
+    if not credentials:
+        raise HTTPException(
+            status_code=403,
+            detail="Missing API key. Provide via Authorization: Bearer <key>"
+        )
+    
+    # In development, allow demo key
+    if FAP_ENV == "development" and credentials.credentials == "dev-key":
+        return credentials.credentials
+    
+    # In all environments, validate against FAP_API_KEY
+    if FAP_API_KEY and credentials.credentials == FAP_API_KEY:
+        return credentials.credentials
+    
+    raise HTTPException(
+        status_code=403,
+        detail="Invalid API key"
+    )
 
 @app.get("/demo")
 async def demo():

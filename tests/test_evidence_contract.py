@@ -4,7 +4,7 @@ from pydantic import ValidationError
 from fap_core.api_models import VerifyRequest
 
 BASE = {
-    "timestamp_claimed": datetime.now(timezone.utc).isoformat(),
+    "timestamp_claimed": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(),
     "geo": {"lat": 29.7604, "lon": -95.3698},
     "media_hash": "a" * 64,
     "media_type": "image",
@@ -37,7 +37,7 @@ def test_rejects_future_timestamp():
 
 
 def test_normalizes_timestamp_to_utc():
-    payload = {**BASE, "timestamp_claimed": "2026-08-28T12:00:00-05:00"}
+    payload = {**BASE, "timestamp_claimed": "2026-08-28T11:00:00-05:00"}
     req = VerifyRequest(**payload)
     assert req.timestamp_claimed.tzinfo is not None
     assert req.timestamp_claimed.utcoffset() == timedelta(0)

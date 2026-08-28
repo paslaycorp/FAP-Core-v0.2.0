@@ -26,5 +26,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
+      - run: pip install -r fap-insurance/requirements.txt
       - run: python -m pip install pytest
       - run: PYTHONPATH=fap-insurance python -m pytest -q fap-insurance/tests

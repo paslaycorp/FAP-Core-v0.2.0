@@ -61,18 +61,20 @@ async def verify(request: Request, req: VerifyRequest, api_key: str = Depends(ve
         created_at=datetime.now(timezone.utc), media_path="api", media_hash=req.media_hash, media_type=req.media_type,
         geo=geo, device=device, claimed_timestamp=req.timestamp_claimed, witness_ids=req.witness_ids
     )
-    pipeline = VerificationPipeline()
-    artifact = pipeline.verify(artifact)
+    artifact = VerificationPipeline().verify(artifact)
 
+    # The API verifies evidence, but does not possess the rule context required
+    # to establish applicability, authority, or consequence safety. Those states
+    # therefore remain UNKNOWN rather than being inferred from a score.
     boundary = EpistemicBoundary(
-        integrity=BoundaryState.VALID,
-        identity=BoundaryState.VALID if artifact.device.is_enrolled() else BoundaryState.UNKNOWN,
+        integrity=BoundaryState.UNKNOWN,
+        identity=BoundaryState.UNKNOWN,
         temporal_validity=BoundaryState.VALID,
         applicability=BoundaryState.UNKNOWN,
         authority=BoundaryState.UNKNOWN,
         consequence_safety=BoundaryState.UNKNOWN,
     )
-    boundary_note = "Verification does not establish applicability, authority, or consequence safety."
+    boundary_note = "Verification establishes evidence observations only; applicability, authority, and consequence safety remain undetermined."
     artifact.record_event("epistemic_boundary", boundary.model_dump())
     artifact.record_event("non_inheritance_guard", {"rule": "VERIFIED_NOT_AUTHORIZED", "note": boundary_note})
 

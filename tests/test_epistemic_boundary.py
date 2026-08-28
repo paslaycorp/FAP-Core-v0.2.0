@@ -1,7 +1,19 @@
+import itertools
+
 import pytest
 
 from fap_core.artifact import Artifact, ArtifactStatus
 from fap_core.epistemic_boundary import BoundaryState, EpistemicBoundary
+
+
+FIELDS = (
+    "integrity",
+    "identity",
+    "temporal_validity",
+    "applicability",
+    "authority",
+    "consequence_safety",
+)
 
 
 def fully_valid_boundary() -> EpistemicBoundary:
@@ -29,34 +41,14 @@ def test_verification_does_not_authorize_when_authority_invalid():
     assert not state.is_actionable()
 
 
-@pytest.mark.parametrize(
-    "field",
-    [
-        "integrity",
-        "identity",
-        "temporal_validity",
-        "applicability",
-        "authority",
-        "consequence_safety",
-    ],
-)
+@pytest.mark.parametrize("field", FIELDS)
 def test_any_non_valid_boundary_state_blocks_action(field):
     state = fully_valid_boundary()
     setattr(state, field, BoundaryState.INVALID)
     assert not state.is_actionable()
 
 
-@pytest.mark.parametrize(
-    "field",
-    [
-        "integrity",
-        "identity",
-        "temporal_validity",
-        "applicability",
-        "authority",
-        "consequence_safety",
-    ],
-)
+@pytest.mark.parametrize("field", FIELDS)
 def test_any_unknown_boundary_state_blocks_action(field):
     state = fully_valid_boundary()
     setattr(state, field, BoundaryState.UNKNOWN)
@@ -117,3 +109,11 @@ def test_boundary_requires_explicit_authority_even_when_everything_else_is_valid
     state.authority = BoundaryState.UNKNOWN
     assert not state.is_actionable()
     assert state.verification_does_not_authorize()
+
+
+@pytest.mark.parametrize("states", itertools.product(tuple(BoundaryState), repeat=len(FIELDS)))
+def test_exhaustive_boundary_state_space_has_no_action_bypass(states):
+    state = EpistemicBoundary(**dict(zip(FIELDS, states)))
+    expected_actionable = all(value is BoundaryState.VALID for value in states)
+    assert state.is_actionable() is expected_actionable
+    assert state.verification_does_not_authorize() is (state.authority is not BoundaryState.VALID)

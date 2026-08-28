@@ -24,6 +24,25 @@ class TestArtifact:
     def test_provenance_hash_deterministic(self):
         artifact = Artifact.from_capture(media_path="/photos/test.jpg", media_hash="abc123", media_type="image", latitude=29.53, longitude=-98.46, device_model="TestPhone", device_manufacturer="TestCo", os_version="1.0")
         assert artifact.provenance_hash() == artifact.provenance_hash()
+    def test_serialization_round_trip_preserves_nested_representation(self):
+        artifact = Artifact.from_capture(media_path="/photos/test.jpg", media_hash="abc123", media_type="image", latitude=29.53, longitude=-98.46, device_model="TestPhone", device_manufacturer="TestCo", os_version="1.0", enrollment_id="A7F2-9912", metadata={"source": "test"}, tags=["evidence"], exif={"camera": "test"})
+        artifact.set_oracle_results(OracleResults(solar={"confidence": 0.95}, weather={"confidence": 0.90}, timestamp_verified=True))
+        artifact.set_score(total=0.92, verdict="STRICT", components={"solar": 0.95}, confidence=0.88, audit={})
+        artifact.finalize()
+        restored = Artifact.from_dict(artifact.to_dict())
+        assert restored.artifact_id == artifact.artifact_id
+        assert restored.media_path == artifact.media_path
+        assert restored.media_hash == artifact.media_hash
+        assert restored.media_type == artifact.media_type
+        assert restored.metadata == artifact.metadata
+        assert restored.exif_raw == artifact.exif_raw
+        assert restored.component_scores == artifact.component_scores
+        assert restored.final_score == artifact.final_score
+        assert restored.verdict == artifact.verdict
+        assert restored.confidence == artifact.confidence
+        assert restored.status == artifact.status
+        assert restored.oracle_results.to_dict() == artifact.oracle_results.to_dict()
+        assert restored.provenance_hash() == artifact.provenance_hash()
     def test_score_lifecycle(self):
         artifact = Artifact.from_capture(media_path="/photos/test.jpg", media_hash="abc123", media_type="image", latitude=29.53, longitude=-98.46, device_model="TestPhone", device_manufacturer="TestCo", os_version="1.0")
         artifact.set_oracle_results(OracleResults(solar={"confidence": 0.95}, weather={"confidence": 0.90}, timestamp_verified=True))

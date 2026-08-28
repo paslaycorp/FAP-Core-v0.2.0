@@ -27,5 +27,6 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
       - run: pip install -r fap-insurance/requirements.txt
+      # Test-only HTTP client required by Starlette's TestClient.
       - run: python -m pip install pytest httpx2
       - run: PYTHONPATH=.:fap-insurance python -m pytest -q fap-insurance/tests

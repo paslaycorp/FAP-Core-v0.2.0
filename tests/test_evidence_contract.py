@@ -37,7 +37,8 @@ def test_rejects_future_timestamp():
 
 
 def test_normalizes_timestamp_to_utc():
-    payload = {**BASE, "timestamp_claimed": "2026-08-28T11:00:00-05:00"}
+    # Fixed historical instant; independent of CI execution time.
+    payload = {**BASE, "timestamp_claimed": "2020-01-02T12:00:00-05:00"}
     req = VerifyRequest(**payload)
     assert req.timestamp_claimed.tzinfo is not None
     assert req.timestamp_claimed.utcoffset() == timedelta(0)

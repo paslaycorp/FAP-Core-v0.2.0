@@ -9,9 +9,9 @@ import requests
 import hashlib
 import json
 
-from .config import config
-from .report_generator import AdjusterReport
-from .pricing import PricingCalculator
+from config import config
+from report_generator import AdjusterReport
+from pricing import PricingCalculator
 
 app = FastAPI(
     title="FAP-Insurance",
@@ -184,7 +184,6 @@ async def health():
 async def verify_claim(req: VerifyClaimRequest):
     start = datetime.now(timezone.utc)
 
-    # Build FAP-Core payload
     fap_payload = {
         "media_hash": req.media_hash or hashlib.sha256(
             f"{req.claim_id}:{req.timestamp_claimed.isoformat()}".encode()
@@ -207,7 +206,6 @@ async def verify_claim(req: VerifyClaimRequest):
     score = result.get("total_score", 0.0)
     components = result.get("components", {})
 
-    # Generate report
     report = AdjusterReport(
         claim_id=req.claim_id,
         policy_number=req.policy_number,
@@ -225,13 +223,13 @@ async def verify_claim(req: VerifyClaimRequest):
         score=round(score, 4),
         confidence=round(result.get("confidence", 0.0), 4),
         components=components,
-        solar_flux_at_time=result.get("audit_trail", [{}])[3].get("details", {}).get("flux") 
+        solar_flux_at_time=result.get("audit_trail", [{}])[3].get("details", {}).get("flux")
             if len(result.get("audit_trail", [])) > 3 else None,
         weather_match=components.get("weather"),
         device_enrolled=components.get("hardware", 0.0) > 0.5,
         witness_count=len(req.witness_ids),
         processing_time_ms=elapsed_ms,
-        report_url=None,  # TODO: upload to S3/R2
+        report_url=None,
         recommendation=_recommendation(verdict, score),
         timestamp_processed=datetime.now(timezone.utc)
     )
@@ -243,7 +241,6 @@ async def verify_batch(requests: List[VerifyClaimRequest]):
         raise HTTPException(status_code=400, detail="Batch limit is 10 claims per request")
     results = []
     for req in requests:
-        # Reuse single-verify logic
         try:
             r = await verify_claim(req)
             results.append({"claim_id": req.claim_id, "status": "ok", "result": r.dict()})
@@ -254,7 +251,6 @@ async def verify_batch(requests: List[VerifyClaimRequest]):
 @app.get("/report/{verification_id}", response_class=HTMLResponse)
 async def get_report(verification_id: str):
     """Retrieve a generated adjuster report by verification ID."""
-    # In production: fetch from database/cache
     return HTMLResponse(content="<h1>Report retrieval not yet implemented</h1><p>Store reports in production.</p>")
 
 @app.get("/pricing")

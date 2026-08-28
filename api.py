@@ -77,21 +77,17 @@ async def rl_handler(request, exc):
     return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
 
 def verify_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Validate incoming API key against environment secret."""
+    """Validate incoming API key against the environment secret."""
     if not credentials:
         raise HTTPException(
             status_code=403,
             detail="Missing API key. Provide via Authorization: Bearer <key>"
         )
-    
-    # In development, allow demo key
-    if FAP_ENV == "development" and credentials.credentials == "dev-key":
-        return credentials.credentials
-    
-    # In all environments, validate against FAP_API_KEY
+
+    # Validate against the injected environment secret in every environment.
     if FAP_API_KEY and credentials.credentials == FAP_API_KEY:
         return credentials.credentials
-    
+
     raise HTTPException(
         status_code=403,
         detail="Invalid API key"

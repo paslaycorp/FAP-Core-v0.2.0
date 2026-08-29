@@ -1,9 +1,10 @@
 """FAP-Insurance API Tests"""
 import pytest
 from fastapi.testclient import TestClient
-from fap_insurance.api import app
-from fap_insurance.pricing import PricingCalculator, get_pricing_summary
-from fap_insurance.report_generator import AdjusterReport
+from api import app
+from pricing import PricingCalculator, get_pricing_summary
+from report_generator import AdjusterReport
+from config import config
 
 client = TestClient(app)
 
@@ -131,12 +132,10 @@ def test_report_markdown_generation():
 # ─── Config ──────────────────────────────────────────────────────────
 
 def test_config_thresholds():
-    from fap_insurance.config import config
     assert config.STRICT_LABEL == "VERIFIED — Proceed with claim"
     assert config.QUARANTINE_LABEL == "FRAUD RISK — Deny / escalate to SIU"
 
 def test_pricing_tiers_complete():
-    from fap_insurance.config import config
     assert "pilot" in config.TIERS
     assert "starter" in config.TIERS
     assert "carrier" in config.TIERS

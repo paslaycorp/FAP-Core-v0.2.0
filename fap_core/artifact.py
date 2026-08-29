@@ -57,4 +57,20 @@ class Artifact:
         return artifact
     @classmethod
     def from_dict(cls, data):
-        return cls(artifact_id=data["artifact_id"], created_at=data["created_at"], media_path=data["media_path"], media_hash=data["media_hash"], media_type=data["media_type"], geo=GeoStamp(**data["geo"]), device=DeviceStamp(**data["device"]), claimed_timestamp=data["claimed_timestamp"], metadata=data.get("metadata", {}), exif_raw=data.get("exif_raw", {}), tags=data.get("tags", []), oracle_results=OracleResults(**data.get("oracle_results", {})), component_scores=data.get("component_scores", {}), final_score=data.get("final_score"), verdict=data.get("verdict"), confidence=data.get("confidence"), status=ArtifactStatus(data.get("status", "captured")), audit_trail=data.get("audit_trail", []), parent_id=data.get("parent_id"), witness_ids=data.get("witness_ids", []))
+        media = data.get("media", {})
+        scores = data.get("scores", {})
+        return cls(
+            artifact_id=data["artifact_id"], created_at=data["created_at"],
+            media_path=media.get("path", data.get("media_path", "")),
+            media_hash=media.get("hash", data.get("media_hash", "")),
+            media_type=media.get("type", data.get("media_type", "image")),
+            geo=GeoStamp(**data["geo"]), device=DeviceStamp(**data["device"]),
+            claimed_timestamp=data["claimed_timestamp"], metadata=data.get("metadata", {}),
+            exif_raw=data.get("exif", data.get("exif_raw", {})), tags=data.get("tags", []),
+            oracle_results=OracleResults(**data.get("oracle_results", {})),
+            component_scores=scores.get("components", data.get("component_scores", {})),
+            final_score=scores.get("total", data.get("final_score")),
+            verdict=scores.get("verdict", data.get("verdict")), confidence=scores.get("confidence", data.get("confidence")),
+            status=ArtifactStatus(data.get("status", "captured")), audit_trail=data.get("audit_trail", []),
+            parent_id=data.get("parent_id"), witness_ids=data.get("witness_ids", []),
+        )

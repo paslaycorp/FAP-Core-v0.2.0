@@ -1,100 +1,64 @@
-"""Transition battery: prevent unauthorized epistemic/provenance/integrity upgrades."""
-from enum import Enum
-from itertools import product
+"""Transition battery: exercise the repository's actual epistemic boundary contract."""
+import itertools
 
-import pytest
+from fap_core.epistemic_boundary import BoundaryState, EpistemicBoundary
 
-
-class ProvenanceState(str, Enum):
-    UNTRACEABLE = "UNTRACEABLE"
-    TRACEABLE = "TRACEABLE"
-    CORROBORATED = "CORROBORATED"
-    INDEPENDENT = "INDEPENDENT"
-
-
-class IntegrityState(str, Enum):
-    UNKNOWN = "UNKNOWN"
-    CONTRADICTED = "CONTRADICTED"
-    DEGRADED = "DEGRADED"
-    SOUND = "SOUND"
-    VERIFIED = "VERIFIED"
+FIELDS = (
+    "integrity",
+    "identity",
+    "temporal_validity",
+    "applicability",
+    "authority",
+    "consequence_safety",
+)
 
 
-class EpistemicState(str, Enum):
-    OBSERVED = "OBSERVED"
-    EVIDENCED = "EVIDENCED"
-    DERIVED = "DERIVED"
-    INFERRED = "INFERRED"
-    PREDICTED = "PREDICTED"
-    SIMULATED = "SIMULATED"
-    COUNTERFACTUAL = "COUNTERFACTUAL"
+def make_state(values):
+    return EpistemicBoundary(**dict(zip(FIELDS, values)))
 
 
-PROVENANCE_RANK = {s: i for i, s in enumerate(ProvenanceState)}
-INTEGRITY_RANK = {s: i for i, s in enumerate(IntegrityState)}
-EPISTEMIC_RANK = {s: i for i, s in enumerate(EpistemicState)}
+def test_exhaustive_successor_cannot_bypass_actual_boundary():
+    """729 real boundary states: only all-VALID is actionable."""
+    for values in itertools.product(
+        (BoundaryState.UNKNOWN, BoundaryState.VALID, BoundaryState.INVALID),
+        repeat=len(FIELDS),
+    ):
+        state = make_state(values)
+        expected = all(value is BoundaryState.VALID for value in values)
+        assert state.is_actionable() is expected
 
 
-def admissible_upgrade(before, after, *, evidence=False, authority=False):
-    """A stronger state requires an explicit transition justification."""
-    upgraded = (
-        PROVENANCE_RANK[after[0]] > PROVENANCE_RANK[before[0]]
-        or INTEGRITY_RANK[after[1]] > INTEGRITY_RANK[before[1]]
-        or EPISTEMIC_RANK[after[2]] > EPISTEMIC_RANK[before[2]]
-    )
-    return not upgraded or (evidence and authority)
+def test_single_dimension_breach_blocks_action():
+    for field in FIELDS:
+        state = make_state([BoundaryState.VALID] * len(FIELDS))
+        setattr(state, field, BoundaryState.UNKNOWN)
+        assert not state.is_actionable()
+        setattr(state, field, BoundaryState.INVALID)
+        assert not state.is_actionable()
 
 
-@pytest.mark.parametrize("before", product(ProvenanceState, IntegrityState, EpistemicState))
-def test_unjustified_self_upgrade_is_rejected(before):
-    assert admissible_upgrade(before, before)
+def test_recovery_requires_restoring_breached_dimension():
+    state = make_state([BoundaryState.VALID] * len(FIELDS))
+    state.integrity = BoundaryState.INVALID
+    assert not state.is_actionable()
+    state.integrity = BoundaryState.VALID
+    assert state.is_actionable()
 
 
-@pytest.mark.parametrize("before,after", product(
-    product(ProvenanceState, IntegrityState, EpistemicState),
-    product(ProvenanceState, IntegrityState, EpistemicState),
-))
-def test_no_stronger_successor_without_evidence_and_authority(before, after):
-    if after != before:
-        assert not admissible_upgrade(before, after, evidence=False, authority=False)
+def test_verification_never_becomes_authorization_with_missing_authority():
+    state = make_state([BoundaryState.VALID] * len(FIELDS))
+    state.authority = BoundaryState.UNKNOWN
+    assert state.verification_does_not_authorize()
+    assert not state.is_actionable()
 
 
-@pytest.mark.parametrize("before,after", product(
-    product(ProvenanceState, IntegrityState, EpistemicState),
-    product(ProvenanceState, IntegrityState, EpistemicState),
-))
-def test_upgrade_requires_both_evidence_and_authority(before, after):
-    if after != before:
-        assert not admissible_upgrade(before, after, evidence=True, authority=False)
-        assert not admissible_upgrade(before, after, evidence=False, authority=True)
+def test_verification_never_becomes_authorization_with_invalid_authority():
+    state = make_state([BoundaryState.VALID] * len(FIELDS))
+    state.authority = BoundaryState.INVALID
+    assert state.verification_does_not_authorize()
+    assert not state.is_actionable()
 
 
-def test_strongest_tuple_cannot_be_created_by_assertion_alone():
-    weakest = (
-        ProvenanceState.UNTRACEABLE,
-        IntegrityState.UNKNOWN,
-        EpistemicState.COUNTERFACTUAL,
-    )
-    strongest = (
-        ProvenanceState.INDEPENDENT,
-        IntegrityState.VERIFIED,
-        EpistemicState.OBSERVED,
-    )
-    assert not admissible_upgrade(weakest, strongest, evidence=False, authority=False)
-    assert not admissible_upgrade(weakest, strongest, evidence=True, authority=False)
-    assert not admissible_upgrade(weakest, strongest, evidence=False, authority=True)
-    assert admissible_upgrade(weakest, strongest, evidence=True, authority=True)
-
-
-def test_downgrades_are_not_upgrades():
-    strongest = (
-        ProvenanceState.INDEPENDENT,
-        IntegrityState.VERIFIED,
-        EpistemicState.OBSERVED,
-    )
-    weakest = (
-        ProvenanceState.UNTRACEABLE,
-        IntegrityState.UNKNOWN,
-        EpistemicState.COUNTERFACTUAL,
-    )
-    assert admissible_upgrade(strongest, weakest)
+def test_valid_boundary_is_actionable():
+    state = make_state([BoundaryState.VALID] * len(FIELDS))
+    assert state.is_actionable()

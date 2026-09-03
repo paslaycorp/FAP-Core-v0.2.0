@@ -50,8 +50,8 @@ def test_duplicate_witness_ids_rejected():
     assert_invalid(witness_ids=["W-001", "W-001"])
 
 
-def test_more_than_20_witness_ids_rejected():
-    assert_invalid(witness_ids=[f"W-{i:03d}" for i in range(21)])
+def test_more_than_10_witness_ids_rejected():
+    assert_invalid(witness_ids=[f"W-{i:03d}" for i in range(11)])
 
 
 def test_blank_witness_id_rejected():

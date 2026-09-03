@@ -1,4 +1,5 @@
 """FAP-Insurance Configuration — Adjuster-Facing Defaults"""
+import os
 from dataclasses import dataclass
 from typing import Dict, List
 
@@ -11,8 +12,8 @@ class PricingTier:
     features: List[str]
 
 class InsuranceConfig:
-    # Core API endpoint
-    FAP_CORE_URL = "https://fap-core.onrender.com"
+    # Core API endpoint — pulled from environment, with development default
+    FAP_CORE_URL = os.getenv("FAP_CORE_URL", "http://localhost:8000")
 
     # Verdict thresholds for insurance language
     STRICT_LABEL = "VERIFIED — Proceed with claim"

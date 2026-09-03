@@ -1,13 +1,16 @@
 """FAP-Insurance API — Adjuster-Facing Verification Endpoints"""
+from datetime import datetime, timezone
+import hashlib
+import json
+import math
+import re
+from typing import List, Optional, Dict, Any
+
+import requests
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
-import requests
-import hashlib
-import json
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from .config import config
 from .report_generator import AdjusterReport
@@ -73,25 +76,96 @@ app.add_middleware(
 # ─── Models ──────────────────────────────────────────────────────────
 
 class VerifyClaimRequest(BaseModel):
-    claim_id: str = Field(..., description="Your internal claim number")
-    media_url: Optional[str] = Field(None, description="URL to the photo/video")
+    """Strict request-boundary contract for claim verification."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str = Field(..., min_length=6, max_length=256, description="Your internal claim number")
+    media_url: Optional[str] = Field(None, max_length=4096, description="URL to the photo/video")
     media_hash: Optional[str] = Field(None, description="SHA-256 hash of the media file")
     lat: float = Field(..., ge=-90, le=90, description="GPS latitude from EXIF or device")
     lon: float = Field(..., ge=-180, le=180, description="GPS longitude from EXIF or device")
     timestamp_claimed: datetime = Field(..., description="Timestamp the claimant says the photo was taken")
-    device_model: str = Field(..., description="Device model from EXIF (e.g. 'iPhone15,2')")
-    device_manufacturer: str = Field(..., description="Device manufacturer (e.g. 'Apple')")
-    device_os: str = Field(..., description="OS version (e.g. 'iOS 17.1')")
-    enrollment_id: Optional[str] = Field(None, description="Enrolled device ID if pre-registered")
-    witness_ids: List[str] = Field(default_factory=list, description="List of witness device IDs")
-    policy_number: Optional[str] = Field(None, description="Internal policy reference")
-    adjuster_notes: Optional[str] = Field(None, description="Free-form notes")
-    @field_validator("claim_id")
+    device_model: str = Field(..., min_length=1, max_length=256, description="Device model from EXIF (e.g. 'iPhone15,2')")
+    device_manufacturer: str = Field(..., min_length=1, max_length=256, description="Device manufacturer (e.g. 'Apple')")
+    device_os: str = Field(..., min_length=1, max_length=256, description="OS version (e.g. 'iOS 17.1')")
+    enrollment_id: Optional[str] = Field(None, min_length=1, max_length=256, description="Enrolled device ID if pre-registered")
+    witness_ids: List[str] = Field(default_factory=list, max_length=10, description="List of witness device IDs")
+    policy_number: Optional[str] = Field(None, min_length=1, max_length=256, description="Internal policy reference")
+    adjuster_notes: Optional[str] = Field(None, max_length=4000, description="Free-form notes")
+
+    @field_validator("claim_id", "device_model", "device_manufacturer", "device_os", "enrollment_id", "policy_number", "adjuster_notes", mode="before")
     @classmethod
-    def validate_claim_id(cls, v: str):
+    def reject_blank_strings(cls, v):
+        if v is None:
+            return v
+        if not isinstance(v, str):
+            raise ValueError("value must be a string")
         v = v.strip()
-        if len(v) < 6:
-            raise ValueError("claim_id is too short")
+        if not v:
+            raise ValueError("value cannot be blank")
+        return v
+
+    @field_validator("media_url", mode="before")
+    @classmethod
+    def validate_media_url(cls, v):
+        if v is None:
+            return v
+        if not isinstance(v, str):
+            raise ValueError("media_url must be a string")
+        v = v.strip()
+        if not v:
+            raise ValueError("media_url cannot be blank")
+        return v
+
+    @field_validator("media_hash")
+    @classmethod
+    def validate_media_hash(cls, v):
+        if v is None:
+            return v
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", v):
+            raise ValueError("media_hash must be exactly 64 hexadecimal characters (SHA-256)")
+        return v.lower()
+
+    @field_validator("lat", "lon")
+    @classmethod
+    def validate_finite_coordinates(cls, v):
+        if not math.isfinite(v):
+            raise ValueError("coordinate must be finite")
+        return v
+
+    @field_validator("witness_ids")
+    @classmethod
+    def validate_witness_ids(cls, v):
+        normalized = []
+        for witness_id in v:
+            if not isinstance(witness_id, str):
+                raise ValueError("witness_ids must contain strings")
+            witness_id = witness_id.strip()
+            if not witness_id:
+                raise ValueError("witness_ids cannot contain blank values")
+            if len(witness_id) > 256:
+                raise ValueError("witness_id is too long")
+            normalized.append(witness_id)
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("witness_ids must be unique")
+        return normalized
+
+    @field_validator("timestamp_claimed")
+    @classmethod
+    def validate_timestamp(cls, v):
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("timestamp_claimed must include an explicit timezone")
+        if v > datetime.now(timezone.utc):
+            raise ValueError("timestamp_claimed cannot be in the future")
+        return v
+
+    @field_validator("lon")
+    @classmethod
+    def validate_not_null_island(cls, v, info):
+        lat = info.data.get("lat")
+        if lat is not None and lat == 0.0 and v == 0.0:
+            raise ValueError("coordinates at 0,0 are not accepted")
         return v
 
 class VerifyClaimResponse(BaseModel):
@@ -124,7 +198,7 @@ class HealthResponse(BaseModel):
     version: str
     timestamp: datetime
 
-# ─── Helpers ─────────────────────────────────────────────────────────
+# ─── Helpers ──────────────────────────────────────────────────────────
 
 def _call_fap_core(payload: dict) -> dict:
     """Proxy to FAP-Core /verify endpoint."""
@@ -171,7 +245,7 @@ async def health():
     try:
         r = requests.get(f"{config.FAP_CORE_URL}/health", timeout=5)
         fap_ok = r.status_code == 200
-    except:
+    except Exception:
         pass
     return HealthResponse(
         status="healthy",
@@ -184,7 +258,6 @@ async def health():
 async def verify_claim(req: VerifyClaimRequest):
     start = datetime.now(timezone.utc)
 
-    # Build FAP-Core payload
     fap_payload = {
         "media_hash": req.media_hash or hashlib.sha256(
             f"{req.claim_id}:{req.timestamp_claimed.isoformat()}".encode()
@@ -207,13 +280,12 @@ async def verify_claim(req: VerifyClaimRequest):
     score = result.get("total_score", 0.0)
     components = result.get("components", {})
 
-    # Generate report
     report = AdjusterReport(
         claim_id=req.claim_id,
         policy_number=req.policy_number,
         adjuster_notes=req.adjuster_notes,
         fap_result=result,
-        request_data=req.dict()
+        request_data=req.model_dump()
     )
     report_html = report.to_html()
 
@@ -225,13 +297,13 @@ async def verify_claim(req: VerifyClaimRequest):
         score=round(score, 4),
         confidence=round(result.get("confidence", 0.0), 4),
         components=components,
-        solar_flux_at_time=result.get("audit_trail", [{}])[3].get("details", {}).get("flux") 
+        solar_flux_at_time=result.get("audit_trail", [{}])[3].get("details", {}).get("flux")
             if len(result.get("audit_trail", [])) > 3 else None,
         weather_match=components.get("weather"),
         device_enrolled=components.get("hardware", 0.0) > 0.5,
         witness_count=len(req.witness_ids),
         processing_time_ms=elapsed_ms,
-        report_url=None,  # TODO: upload to S3/R2
+        report_url=None,
         recommendation=_recommendation(verdict, score),
         timestamp_processed=datetime.now(timezone.utc)
     )
@@ -243,10 +315,9 @@ async def verify_batch(requests: List[VerifyClaimRequest]):
         raise HTTPException(status_code=400, detail="Batch limit is 10 claims per request")
     results = []
     for req in requests:
-        # Reuse single-verify logic
         try:
             r = await verify_claim(req)
-            results.append({"claim_id": req.claim_id, "status": "ok", "result": r.dict()})
+            results.append({"claim_id": req.claim_id, "status": "ok", "result": r.model_dump()})
         except HTTPException as e:
             results.append({"claim_id": req.claim_id, "status": "error", "detail": e.detail})
     return {"processed": len(results), "results": results}
@@ -254,7 +325,6 @@ async def verify_batch(requests: List[VerifyClaimRequest]):
 @app.get("/report/{verification_id}", response_class=HTMLResponse)
 async def get_report(verification_id: str):
     """Retrieve a generated adjuster report by verification ID."""
-    # In production: fetch from database/cache
     return HTMLResponse(content="<h1>Report retrieval not yet implemented</h1><p>Store reports in production.</p>")
 
 @app.get("/pricing")

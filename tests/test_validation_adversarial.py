@@ -86,15 +86,26 @@ def test_future_timestamp_is_rejected():
     "g" * 64,
     "a" * 63,
     "a" * 65,
-    None,
 ])
 def test_supplied_media_hash_must_be_sha256(media_hash):
-    payload = valid_payload(media_hash=media_hash)
-    if media_hash is None:
-        VerifyClaimRequest(**payload)
-    else:
-        with pytest.raises(ValidationError):
-            VerifyClaimRequest(**payload)
+    with pytest.raises(ValidationError):
+        VerifyClaimRequest(**valid_payload(media_hash=media_hash))
+
+
+def test_media_hash_is_normalized_to_lowercase():
+    request = VerifyClaimRequest(**valid_payload(media_hash="ABCDEF0123456789" * 4))
+    assert request.media_hash == "abcdef0123456789" * 4
+
+
+@pytest.mark.parametrize("url", [
+    "javascript:alert(1)",
+    "file:///etc/passwd",
+    "ftp://example.com/evidence.jpg",
+    "not-a-url",
+])
+def test_media_url_rejects_unsafe_or_malformed_schemes(url):
+    with pytest.raises(ValidationError):
+        VerifyClaimRequest(**valid_payload(media_url=url))
 
 
 def test_witness_ids_must_be_unique():
@@ -147,10 +158,6 @@ def test_extra_fields_are_rejected():
 def test_valid_boundary_coordinates_are_accepted():
     VerifyClaimRequest(**valid_payload(lat=90.0, lon=180.0))
     VerifyClaimRequest(**valid_payload(lat=-90.0, lon=-180.0))
-
-
-def test_valid_sha256_is_accepted():
-    VerifyClaimRequest(**valid_payload(media_hash="ABCDEF0123456789" * 4))
 
 
 def test_default_witnesses_are_empty_list():

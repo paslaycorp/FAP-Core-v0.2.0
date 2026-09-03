@@ -5,7 +5,7 @@ from jinja2 import Template
 import json
 
 class AdjusterReport:
-    def __init__(self, claim_id: str, policy_number: Optional[str], 
+    def __init__(self, claim_id: str, policy_number: Optional[str],
                  adjuster_notes: Optional[str], fap_result: dict, request_data: dict):
         self.claim_id = claim_id
         self.policy_number = policy_number or "N/A"
@@ -17,7 +17,7 @@ class AdjusterReport:
     def _verdict_badge(self, verdict: str) -> str:
         colors = {
             "STRICT": "#22c55e",
-            "PROBABLE": "#3b82f6", 
+            "PROBABLE": "#3b82f6",
             "SUSPICIOUS": "#f59e0b",
             "QUARANTINE": "#ef4444"
         }
@@ -53,7 +53,7 @@ class AdjusterReport:
                 <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:center;color:{color};font-weight:bold;">{icon} {val:.2f}</td>
             </tr>
             """)
-        return "<table style="width:100%;border-collapse:collapse;">" + "".join(rows) + "</table>"
+        return '<table style="width:100%;border-collapse:collapse;">' + "".join(rows) + '</table>'
 
     def to_html(self) -> str:
         verdict = self.fap.get("verdict", "UNKNOWN")
@@ -104,7 +104,7 @@ class AdjusterReport:
         </div>
         {self._score_bar(score)}
         <div style="margin-top:12px;font-size:13px;color:#6b7280;">
-            Confidence: {confidence:.4f} &nbsp;|&nbsp; 
+            Confidence: {confidence:.4f} &nbsp;|&nbsp;
             Witnesses: {len(self.req.get('witness_ids', []))} &nbsp;|&nbsp;
             Device Enrolled: {"Yes" if components.get('hardware', 0) > 0.5 else "No"}
         </div>
@@ -141,7 +141,7 @@ class AdjusterReport:
         <h2>Adjuster Recommendation</h2>
         <div class="recommendation {"approve" if verdict == "STRICT" else "warn" if verdict in ["PROBABLE", "SUSPICIOUS"] else "deny"}">
             <strong>{"APPROVE" if verdict == "STRICT" else "REVIEW" if verdict in ["PROBABLE", "SUSPICIOUS"] else "DENY / ESCALATE"}</strong><br>
-            {"Photo provenance verified against live NOAA solar data. All oracles confirm authenticity. Proceed with standard processing." if verdict == "STRICT" else 
+            {"Photo provenance verified against live NOAA solar data. All oracles confirm authenticity. Proceed with standard processing." if verdict == "STRICT" else
              "Multiple verification signals are weak or missing. Require claimant interview and secondary documentation." if verdict == "SUSPICIOUS" else
              "High probability of fabricated timestamp or unknown device. Escalate to Special Investigations Unit."}
         </div>

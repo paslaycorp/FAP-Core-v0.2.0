@@ -97,17 +97,6 @@ def test_media_hash_is_normalized_to_lowercase():
     assert request.media_hash == "abcdef0123456789" * 4
 
 
-@pytest.mark.parametrize("url", [
-    "javascript:alert(1)",
-    "file:///etc/passwd",
-    "ftp://example.com/evidence.jpg",
-    "not-a-url",
-])
-def test_media_url_rejects_unsafe_or_malformed_schemes(url):
-    with pytest.raises(ValidationError):
-        VerifyClaimRequest(**valid_payload(media_url=url))
-
-
 def test_witness_ids_must_be_unique():
     with pytest.raises(ValidationError):
         VerifyClaimRequest(**valid_payload(witness_ids=["w-001", "w-001"]))

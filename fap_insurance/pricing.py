@@ -116,5 +116,4 @@ def get_pricing_summary() -> str:
         "Every verification takes <3 seconds.",
         "Every fraud case caught pays for 3,750 verifications."
     ]
-    return "
-".join(lines)
+    return "\n".join(lines)

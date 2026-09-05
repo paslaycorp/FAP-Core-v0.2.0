@@ -36,6 +36,11 @@ class VerifyResponse(BaseModel):
     audit_trail: List[Dict[str, Any]]
     recommendations: List[str]
     processed_at: datetime
+    epm_attestation: Optional[Dict[str, Any]] = None
+
+class AssuranceVerifyRequest(BaseModel):
+    verification: VerifyRequest
+    assurance: Dict[str, Any]
 
 class HealthResponse(BaseModel):
     status: str

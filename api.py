@@ -9,21 +9,17 @@ from fap_core.artifact import Artifact, GeoStamp, DeviceStamp
 from fap_core.verify import VerificationPipeline
 from fap_core.scoring.score import quick_score
 from fap_core.api_models import VerifyRequest, VerifyResponse, HealthResponse, EnrollRequest, EnrollResponse
-import os, hashlib
+from fap_core.epm_exchange import build_attestation
+import os, hashlib, base64, json
 from datetime import datetime, timezone
 
 FAP_ENV = os.getenv("FAP_ENV", "development")
 FAP_API_KEY = os.getenv("FAP_API_KEY")
 FAP_RATE_LIMIT = os.getenv("FAP_RATE_LIMIT", "100/minute")
-
-# Validate required secrets on startup
 if FAP_ENV == "production" and not FAP_API_KEY:
     raise ValueError("CRITICAL: FAP_API_KEY environment variable must be set in production")
-
 security = HTTPBearer(auto_error=False)
 limiter = Limiter(key_func=get_remote_address)
-
-# app MUST be defined BEFORE any @app.route decorators
 app = FastAPI(title="FAP-Core", version=__version__, docs_url="/docs" if FAP_ENV != "production" else None)
 app.state.limiter = limiter
 
@@ -71,78 +67,58 @@ async def root():
     </html>
     """)
 
-
 @app.exception_handler(RateLimitExceeded)
 async def rl_handler(request, exc):
     return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
 
 def verify_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Validate incoming API key against the environment secret."""
     if not credentials:
-        raise HTTPException(
-            status_code=403,
-            detail="Missing API key. Provide via Authorization: Bearer <key>"
-        )
-
-    # Validate against the injected environment secret in every environment.
+        raise HTTPException(status_code=403, detail="Missing API key. Provide via Authorization: Bearer <key>")
     if FAP_API_KEY and credentials.credentials == FAP_API_KEY:
         return credentials.credentials
-
-    raise HTTPException(
-        status_code=403,
-        detail="Invalid API key"
-    )
+    raise HTTPException(status_code=403, detail="Invalid API key")
 
 @app.get("/demo")
 async def demo():
-    l = quick_score(solar_score=1.0, signature_score=0.95, hardware_score=1.0,
-                    weather_score=0.93, witness_score=0.85, gps_score=0.90)
-    f = quick_score(solar_score=0.15, signature_score=0.20, hardware_score=0.0,
-                    weather_score=0.40, witness_score=0.10, gps_score=0.30)
-    e = quick_score(solar_score=0.65, signature_score=0.90, hardware_score=1.0,
-                    weather_score=0.78, witness_score=0.35, gps_score=0.85)
-    return {"scenarios": [
-        {"name": "Legitimate", "score": l.total_score, "verdict": l.verdict},
-        {"name": "Fraudulent", "score": f.total_score, "verdict": f.verdict},
-        {"name": "Edge", "score": e.total_score, "verdict": e.verdict},
-    ]}
+    l = quick_score(solar_score=1.0, signature_score=0.95, hardware_score=1.0, weather_score=0.93, witness_score=0.85, gps_score=0.90)
+    f = quick_score(solar_score=0.15, signature_score=0.20, hardware_score=0.0, weather_score=0.40, witness_score=0.10, gps_score=0.30)
+    e = quick_score(solar_score=0.65, signature_score=0.90, hardware_score=1.0, weather_score=0.78, witness_score=0.35, gps_score=0.85)
+    return {"scenarios": [{"name": "Legitimate", "score": l.total_score, "verdict": l.verdict}, {"name": "Fraudulent", "score": f.total_score, "verdict": f.verdict}, {"name": "Edge", "score": e.total_score, "verdict": e.verdict}]}
 
 @app.get("/health")
-async def health():
-    return HealthResponse(status="healthy", version=__version__, timestamp=datetime.now(timezone.utc))
+async def health(): return HealthResponse(status="healthy", version=__version__, timestamp=datetime.now(timezone.utc))
+
+def _decode_epm_exchange(value: str) -> dict:
+    try:
+        data = json.loads(base64.urlsafe_b64decode(value + "=" * (-len(value) % 4)).decode("utf-8"))
+    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid EPM assurance envelope.") from exc
+    if not isinstance(data, dict): raise HTTPException(status_code=400, detail="Invalid EPM assurance envelope.")
+    for field in ("timestamp_claimed", "requested_at"):
+        if isinstance(data.get(field), str):
+            try: data[field] = datetime.fromisoformat(data[field].replace("Z", "+00:00"))
+            except ValueError as exc: raise HTTPException(status_code=400, detail="Invalid EPM assurance timestamp.") from exc
+    return data
+
+def _epm_verification_payload(req: VerifyRequest) -> dict:
+    return req.model_dump(mode="python", exclude_none=False)
 
 @app.post("/verify", response_model=VerifyResponse)
 @limiter.limit(FAP_RATE_LIMIT)
 async def verify(request: Request, req: VerifyRequest, api_key: str = Depends(verify_key)):
     geo = GeoStamp(latitude=req.geo.lat, longitude=req.geo.lon)
-    device = DeviceStamp(model=req.device.model, manufacturer=req.device.manufacturer,
-                         os_version=req.device.os_version, enrollment_id=req.device.enrollment_id)
-    artifact = Artifact(
-        artifact_id=req.artifact_id or hashlib.sha256(
-            f"{req.media_hash}:{req.timestamp_claimed.isoformat()}".encode()
-        ).hexdigest()[:24],
-        created_at=datetime.now(timezone.utc),
-        media_path="api",
-        media_hash=req.media_hash,
-        media_type=req.media_type,
-        geo=geo,
-        device=device,
-        claimed_timestamp=req.timestamp_claimed,
-        witness_ids=req.witness_ids
-    )
-    pipeline = VerificationPipeline()
-    artifact = pipeline.verify(artifact)
-    return VerifyResponse(
-        artifact_id=artifact.artifact_id,
-        verdict=artifact.verdict or "UNKNOWN",
-        total_score=artifact.final_score or 0.0,
-        confidence=artifact.confidence or 0.0,
-        components=artifact.component_scores or {},
-        provenance_hash=artifact.provenance_hash(),
-        audit_trail=artifact.audit_trail,
-        recommendations=[],
-        processed_at=datetime.now(timezone.utc)
-    )
+    device = DeviceStamp(model=req.device.model, manufacturer=req.device.manufacturer, os_version=req.device.os_version, enrollment_id=req.device.enrollment_id)
+    artifact = Artifact(artifact_id=req.artifact_id or hashlib.sha256(f"{req.media_hash}:{req.timestamp_claimed.isoformat()}".encode()).hexdigest()[:24], created_at=datetime.now(timezone.utc), media_path="api", media_hash=req.media_hash, media_type=req.media_type, geo=geo, device=device, claimed_timestamp=req.timestamp_claimed, witness_ids=req.witness_ids)
+    artifact = VerificationPipeline().verify(artifact)
+    result = VerifyResponse(artifact_id=artifact.artifact_id, verdict=artifact.verdict or "UNKNOWN", total_score=artifact.final_score or 0.0, confidence=artifact.confidence or 0.0, components=artifact.component_scores or {}, provenance_hash=artifact.provenance_hash(), audit_trail=artifact.audit_trail, recommendations=[], processed_at=datetime.now(timezone.utc))
+    epm_header = request.headers.get("X-EPM-Assurance")
+    if epm_header:
+        exchange = _decode_epm_exchange(epm_header)
+        try:
+            result.epm_attestation = build_attestation(exchange=exchange, verification=_epm_verification_payload(req), result=result.model_dump(mode="python"))
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=400, detail="EPM assurance binding failed.") from exc
+    return result
 
 @app.post("/enroll", response_model=EnrollResponse)
 @limiter.limit("10/minute")

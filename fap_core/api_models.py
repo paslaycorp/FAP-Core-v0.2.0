@@ -37,6 +37,10 @@ class VerifyResponse(BaseModel):
     recommendations: List[str]
     processed_at: datetime
 
+class AssuranceVerifyRequest(BaseModel):
+    verification: VerifyRequest
+    assurance: Dict[str, Any]
+
 class HealthResponse(BaseModel):
     status: str
     version: str

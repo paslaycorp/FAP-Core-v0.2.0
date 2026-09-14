@@ -90,7 +90,7 @@ class RenderAPI:
     def get_service(self) -> dict[str, Any]:
         return self._request("GET", f"/services/{self.service_id}")
 
-    def disable_autodeploy(self) -> dict[str, Any]:
+    def disable_autodeploy(self) -> dict[str, Any] | None:
         return self._request(
             "PATCH",
             f"/services/{self.service_id}",
@@ -262,6 +262,7 @@ def release() -> ReleaseAttestation:
     previous_sha = deploy_commit_sha(previous)
     rollback_id: str | None = None
     rollback_status: str | None = None
+    deployment_started = False
 
     attestation = ReleaseAttestation(
         schema_version="fap-core.production-release-attestation/1.0",
@@ -296,18 +297,21 @@ def release() -> ReleaseAttestation:
         if not repo.endswith(f"/{EXPECTED_REPO_SLUG}"):
             raise RuntimeError(f"Unexpected Render repository binding: {repo!r}")
 
-        # GitHub Actions is the sole deployment authority once this authenticated
-        # controller runs. Remove the broken provider webhook from the trust path.
-        updated = api.disable_autodeploy()
-        if updated.get("autoDeploy") not in {"no", None}:
+        # GitHub Actions becomes the sole deployment authority. Do not infer that
+        # the provider webhook is disabled from the PATCH response: re-read the
+        # control plane and require explicit state before any deploy is created.
+        api.disable_autodeploy()
+        disabled_service = api.get_service()
+        if disabled_service.get("autoDeploy") != "no":
             raise RuntimeError(
-                f"Render autoDeploy did not disable: {updated.get('autoDeploy')!r}"
+                f"Render autoDeploy is {disabled_service.get('autoDeploy')!r}, expected 'no'"
             )
 
         created = api.trigger_deploy(release_sha)
         deploy_id = created.get("id")
         if not deploy_id:
             raise RuntimeError(f"Render did not return a deploy id: {created}")
+        deployment_started = True
         attestation.render_deploy_id = deploy_id
 
         created_sha = deploy_commit_sha(created)
@@ -340,7 +344,7 @@ def release() -> ReleaseAttestation:
         attestation.result = "failed"
         attestation.verified_at = datetime.now(timezone.utc).isoformat()
 
-        if previous_id and previous_sha and previous_sha != release_sha:
+        if deployment_started and previous_id and previous_sha and previous_sha != release_sha:
             try:
                 rolled = api.rollback(previous_id)
                 rollback_id = rolled.get("id")

@@ -1,10 +1,14 @@
-from pydantic import BaseModel, Field
+import os
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+
+from pydantic import BaseModel, Field
+
 
 class GeoInput(BaseModel):
     lat: float = Field(..., ge=-90.0, le=90.0)
     lon: float = Field(..., ge=-180.0, le=180.0)
+
 
 class DeviceInput(BaseModel):
     model: str
@@ -12,9 +16,11 @@ class DeviceInput(BaseModel):
     os_version: str
     enrollment_id: Optional[str] = None
 
+
 class WeatherReport(BaseModel):
     temperature_c: Optional[float] = None
     humidity_percent: Optional[float] = Field(None, ge=0.0, le=100.0)
+
 
 class VerifyRequest(BaseModel):
     artifact_id: Optional[str] = None
@@ -25,6 +31,7 @@ class VerifyRequest(BaseModel):
     device: DeviceInput
     weather_reported: Optional[WeatherReport] = None
     witness_ids: List[str] = Field(default_factory=list)
+
 
 class VerifyResponse(BaseModel):
     artifact_id: str
@@ -37,13 +44,21 @@ class VerifyResponse(BaseModel):
     recommendations: List[str]
     processed_at: datetime
 
+
 class HealthResponse(BaseModel):
     status: str
     version: str
     timestamp: datetime
+    service: str = "fap-core"
+    git_commit: str = Field(default_factory=lambda: os.getenv("RENDER_GIT_COMMIT", "unknown"))
+    git_branch: str = Field(default_factory=lambda: os.getenv("RENDER_GIT_BRANCH", "unknown"))
+    git_repo_slug: str = Field(default_factory=lambda: os.getenv("RENDER_GIT_REPO_SLUG", "unknown"))
+    render_service_id: Optional[str] = Field(default_factory=lambda: os.getenv("RENDER_SERVICE_ID"))
+
 
 class EnrollRequest(BaseModel):
     device_id: str = Field(..., min_length=4, max_length=128)
+
 
 class EnrollResponse(BaseModel):
     device_id: str

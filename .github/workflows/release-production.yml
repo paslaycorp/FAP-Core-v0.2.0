@@ -1,0 +1,185 @@
+name: Production Release
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Exact main-branch commit SHA to release; blank means current main"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  deployments: write
+
+concurrency:
+  group: fap-core-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://fap-core-odm4.onrender.com
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: srv-da8rfv8ae00c73bka16g
+      PRODUCTION_HEALTH_URL: https://fap-core-odm4.onrender.com/health
+
+    steps:
+      - name: Resolve exact release SHA
+        id: target
+        env:
+          DISPATCH_SHA: ${{ inputs.sha }}
+          WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then
+            sha="${WORKFLOW_SHA}"
+          elif [[ -n "${DISPATCH_SHA:-}" ]]; then
+            sha="${DISPATCH_SHA}"
+          else
+            sha="${GITHUB_SHA}"
+          fi
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid release SHA: $sha" >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Reject superseded candidate
+        id: freshness
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          current="$(git rev-parse origin/main)"
+          target="${{ steps.target.outputs.sha }}"
+          if [[ "$current" != "$target" ]]; then
+            echo "Candidate $target is superseded by current main $current; no deployment will occur."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Record superseded release
+        if: steps.freshness.outputs.eligible != 'true'
+        run: |
+          {
+            echo "## FAP-Core production release"
+            echo
+            echo "Candidate was superseded before deployment. No production mutation occurred."
+            echo
+            echo "- Candidate: `${{ steps.target.outputs.sha }}`"
+            echo "- Current main: `$(git rev-parse origin/main)`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require merged-PR provenance
+        if: steps.freshness.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          PR_PAYLOAD="$(gh api -H "Accept: application/vnd.github+json" "repos/${GITHUB_REPOSITORY}/commits/${TARGET_SHA}/pulls")"
+          export PR_PAYLOAD
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          sha = os.environ["TARGET_SHA"]
+          prs = json.loads(os.environ["PR_PAYLOAD"])
+          matches = [
+              pr
+              for pr in prs
+              if pr.get("merged_at")
+              and pr.get("base", {}).get("ref") == "main"
+              and pr.get("merge_commit_sha") == sha
+          ]
+          if len(matches) != 1:
+              print(
+                  f"Release denied: {sha} is not uniquely attributable to one merged PR into main.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          pr = matches[0]
+          number = pr.get("number")
+          url = pr.get("html_url")
+          print(f"Release provenance accepted: PR #{number} -> {sha}")
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as handle:
+                  handle.write("## Merge provenance\n\n")
+                  handle.write(f"- PR: [#{number}]({url})\n")
+                  handle.write(f"- Merge SHA: `{sha}`\n")
+          PY
+
+      - name: Prove CI on manual dispatch
+        if: steps.freshness.outputs.eligible == 'true' && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          count="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/tests.yml/runs?head_sha=${TARGET_SHA}&status=success&per_page=20" \
+            --jq '.total_count')"
+          if [[ "$count" -lt 1 ]]; then
+            echo "No successful Tests workflow exists for $TARGET_SHA" >&2
+            exit 1
+          fi
+
+      - name: Require production credential
+        if: steps.freshness.outputs.eligible == 'true'
+        run: |
+          if [[ -z "${RENDER_API_KEY:-}" ]]; then
+            echo "RENDER_API_KEY is missing from GitHub secrets." >&2
+            echo "Release is fail-closed; nothing was deployed." >&2
+            exit 1
+          fi
+
+      - name: Set up Python
+        if: steps.freshness.outputs.eligible == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install release test dependencies
+        if: steps.freshness.outputs.eligible == 'true'
+        run: python -m pip install "requests>=2.31.0" "pytest>=8.0.0"
+
+      - name: Re-run release-controller tests
+        if: steps.freshness.outputs.eligible == 'true'
+        run: python -m pytest -q tests/test_render_release.py --tb=short
+
+      - name: Deploy exact SHA and prove runtime
+        if: steps.freshness.outputs.eligible == 'true'
+        env:
+          RELEASE_SHA: ${{ steps.target.outputs.sha }}
+        run: python ops/render_release.py
+
+      - name: Upload release attestation
+        if: always() && steps.freshness.outputs.eligible == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fap-core-production-release-attestation-${{ steps.target.outputs.sha }}
+          path: release-attestation.json
+          if-no-files-found: warn
+          retention-days: 90

@@ -178,6 +178,7 @@ def test_release_rolls_back_previous_live_deploy_on_proof_failure(monkeypatch):
                 "id": DEFAULT_SERVICE_ID,
                 "branch": EXPECTED_BRANCH,
                 "repo": f"https://github.com/{EXPECTED_REPO_SLUG}",
+                "autoDeploy": "no",
             }
 
         def disable_autodeploy(self):

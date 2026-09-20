@@ -10,10 +10,14 @@ from fap_core.verify import VerificationPipeline
 from fap_core.scoring.score import quick_score
 from fap_core.epm_contract import EvidenceAttestation, evidence_receipt_from_artifact
 from fap_core.api_models import VerifyRequest, VerifyResponse, HealthResponse, EnrollRequest, EnrollResponse
-import os, hashlib, re
+import hashlib
+import hmac
+import os
+import re
 from datetime import datetime, timezone
 
-FAP_ENV = os.getenv("FAP_ENV", "development")
+_RENDER_DEFAULT_ENV = "production" if os.getenv("RENDER", "").lower() == "true" else "development"
+FAP_ENV = os.getenv("FAP_ENV", _RENDER_DEFAULT_ENV).strip().lower()
 FAP_API_KEY = os.getenv("FAP_API_KEY")
 FAP_RATE_LIMIT = os.getenv("FAP_RATE_LIMIT", "100/minute")
 
@@ -63,7 +67,7 @@ async def root():
             <p><strong>Grand Slam Demo Results</strong></p>
             <p>Legitimate claim: <span class="score strict">0.9545 STRICT</span></p>
             <p>Fraudulent claim: <span class="score quarantine">0.1800 QUARANTINE</span></p>
-            <p>Gap: <strong>0.77</strong> — clear enough for automated decisioning.</p>
+            <p>Gap: <strong>0.77</strong> — evidence separation only; downstream authorization remains outside FAP-Core.</p>
         </div>
         <a href="/docs" class="btn">API Documentation</a>
         <a href="/demo" class="btn btn-secondary">Run Live Demo</a>
@@ -86,7 +90,7 @@ def verify_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
         )
 
     # Validate against the injected environment secret in every environment.
-    if FAP_API_KEY and credentials.credentials == FAP_API_KEY:
+    if FAP_API_KEY and hmac.compare_digest(credentials.credentials, FAP_API_KEY):
         return credentials.credentials
 
     raise HTTPException(

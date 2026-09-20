@@ -55,6 +55,12 @@ class HealthResponse(BaseModel):
     git_branch: str = Field(default_factory=lambda: os.getenv("RENDER_GIT_BRANCH", "unknown"))
     git_repo_slug: str = Field(default_factory=lambda: os.getenv("RENDER_GIT_REPO_SLUG", "unknown"))
     render_service_id: Optional[str] = Field(default_factory=lambda: os.getenv("RENDER_SERVICE_ID"))
+    environment: str = Field(
+        default_factory=lambda: os.getenv(
+            "FAP_ENV",
+            "production" if os.getenv("RENDER", "").lower() == "true" else "development",
+        ).strip().lower()
+    )
 
 
 class EnrollRequest(BaseModel):

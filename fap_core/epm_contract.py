@@ -15,6 +15,7 @@ from typing import Any
 from .artifact import Artifact
 
 CONTRACT_VERSION = "epm-fap-assurance/1.0"
+CONTRACT_REVISION_SHA = "7b20cd45f32c40302388e6cd87c24aa2ab093c5e"
 EVIDENCE_SCHEMA_VERSION = "epm-fap-evidence-receipt/1.0"
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 
@@ -123,13 +124,14 @@ def evidence_receipt_from_artifact(
     provenance_ref = artifact.provenance_hash()
     receipt_material = (
         f"{artifact.artifact_id}:{provenance_ref}:{observed_at.isoformat()}:"
-        f"{producer_commit_sha}:{CONTRACT_VERSION}"
+        f"{producer_commit_sha}:{CONTRACT_VERSION}:{CONTRACT_REVISION_SHA}"
     )
     receipt_id = "fap-evidence:" + hashlib.sha256(receipt_material.encode()).hexdigest()
 
     return {
         "schema_version": EVIDENCE_SCHEMA_VERSION,
         "contract_version": CONTRACT_VERSION,
+        "contract_revision_sha": CONTRACT_REVISION_SHA,
         "receipt_id": receipt_id,
         "evidence_id": artifact.artifact_id,
         "source": source,

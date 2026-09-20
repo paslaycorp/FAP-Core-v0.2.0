@@ -149,7 +149,6 @@ def test_rollback_health_proves_prior_release_identity():
         "https://example.test/health",
         sha,
         DEFAULT_SERVICE_ID,
-        "test-fap-key",
         timeout_seconds=1,
         interval_seconds=0,
         session=session,

@@ -56,6 +56,7 @@ class ReleaseAttestation:
     result: str
     rollback_deploy_id: str | None = None
     rollback_status: str | None = None
+    rollback_runtime_health: dict[str, Any] | None = None
     failure: str | None = None
 
 
@@ -209,6 +210,51 @@ def verify_runtime_health(
     raise RuntimeError(f"Runtime health could not prove release {release_sha}: {last_problem}")
 
 
+def verify_rollback_health(
+    health_url: str,
+    expected_sha: str,
+    service_id: str,
+    *,
+    timeout_seconds: int = 120,
+    interval_seconds: int = 10,
+    session: requests.Session | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    """Prove the rolled-back endpoint is actually serving the prior release SHA."""
+    http = session or requests.Session()
+    deadline = time.monotonic() + timeout_seconds
+    last_problem = "no response"
+
+    while time.monotonic() < deadline:
+        try:
+            response = http.get(
+                health_url,
+                headers={"Cache-Control": "no-cache"},
+                timeout=20,
+            )
+            response.raise_for_status()
+            data = response.json()
+            checks = {
+                "status": data.get("status") == "healthy",
+                "service": data.get("service") == EXPECTED_SERVICE,
+                "commit": data.get("git_commit") == expected_sha,
+                "branch": data.get("git_branch") == EXPECTED_BRANCH,
+                "repo": data.get("git_repo_slug") == EXPECTED_REPO_SLUG,
+                "render_service_id": data.get("render_service_id") == service_id,
+            }
+            if all(checks.values()):
+                return data
+            failed = [name for name, ok in checks.items() if not ok]
+            last_problem = f"rollback health mismatch: {', '.join(failed)}; payload={data}"
+        except Exception as exc:  # noqa: BLE001 - bounded rollback proof retry
+            last_problem = str(exc)
+        sleep(interval_seconds)
+
+    raise RuntimeError(
+        f"Rollback runtime could not prove prior release {expected_sha}: {last_problem}"
+    )
+
+
 def workflow_url() -> str | None:
     server = os.getenv("GITHUB_SERVER_URL")
     repo = os.getenv("GITHUB_REPOSITORY")
@@ -265,7 +311,7 @@ def release() -> ReleaseAttestation:
     deployment_started = False
 
     attestation = ReleaseAttestation(
-        schema_version="fap-core.production-release-attestation/1.0",
+        schema_version="fap-core.production-release-attestation/1.1",
         release_sha=release_sha,
         expected_repo_slug=EXPECTED_REPO_SLUG,
         expected_branch=EXPECTED_BRANCH,
@@ -351,6 +397,16 @@ def release() -> ReleaseAttestation:
                 if rollback_id:
                     rollback_live = wait_for_live(api, rollback_id)
                     rollback_status = str(rollback_live.get("status"))
+                    try:
+                        attestation.rollback_runtime_health = verify_rollback_health(
+                            health_url,
+                            previous_sha,
+                            service_id,
+                        )
+                    except Exception as rollback_health_exc:  # noqa: BLE001
+                        rollback_status = (
+                            f"{rollback_status}; health-unproven: {rollback_health_exc}"
+                        )
                 else:
                     rollback_status = "rollback-requested"
             except Exception as rollback_exc:  # noqa: BLE001 - preserve both failures

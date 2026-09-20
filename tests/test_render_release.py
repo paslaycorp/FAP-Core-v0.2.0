@@ -13,6 +13,7 @@ from ops.render_release import (
     EXPECTED_REPO_SLUG,
     EXPECTED_SERVICE,
     EXPECTED_VERSION,
+    EXPECTED_ENVIRONMENT,
     RenderAPI,
     deploy_commit_sha,
     require_env,
@@ -114,6 +115,7 @@ def test_runtime_health_proves_exact_release_identity():
         "git_branch": EXPECTED_BRANCH,
         "git_repo_slug": EXPECTED_REPO_SLUG,
         "render_service_id": DEFAULT_SERVICE_ID,
+        "environment": EXPECTED_ENVIRONMENT,
     }
     session = FakeSession([FakeResponse(payload)])
 
@@ -138,6 +140,7 @@ def test_rollback_health_proves_prior_release_identity():
         "git_branch": EXPECTED_BRANCH,
         "git_repo_slug": EXPECTED_REPO_SLUG,
         "render_service_id": DEFAULT_SERVICE_ID,
+        "environment": EXPECTED_ENVIRONMENT,
     }
     session = FakeSession([FakeResponse(payload)])
 
@@ -162,6 +165,7 @@ def test_runtime_health_rejects_wrong_sha(monkeypatch):
         "git_branch": EXPECTED_BRANCH,
         "git_repo_slug": EXPECTED_REPO_SLUG,
         "render_service_id": DEFAULT_SERVICE_ID,
+        "environment": EXPECTED_ENVIRONMENT,
     }
     session = FakeSession([FakeResponse(payload)])
     ticks = iter([0.0, 0.0, 2.0])
@@ -251,3 +255,31 @@ def test_release_rolls_back_previous_live_deploy_on_proof_failure(monkeypatch):
         render_release.release()
 
     assert FakeAPI.rollback_target == "dep-old"
+
+def test_runtime_health_rejects_nonproduction_environment(monkeypatch):
+    sha = "c" * 40
+    payload = {
+        "status": "healthy",
+        "service": EXPECTED_SERVICE,
+        "version": EXPECTED_VERSION,
+        "git_commit": sha,
+        "git_branch": EXPECTED_BRANCH,
+        "git_repo_slug": EXPECTED_REPO_SLUG,
+        "render_service_id": DEFAULT_SERVICE_ID,
+        "environment": "development",
+    }
+    session = FakeSession([FakeResponse(payload)])
+    ticks = iter([0.0, 0.0, 2.0])
+    monkeypatch.setattr("ops.render_release.time.monotonic", lambda: next(ticks))
+
+    with pytest.raises(RuntimeError, match="environment"):
+        verify_runtime_health(
+            "https://example.test/health",
+            sha,
+            DEFAULT_SERVICE_ID,
+            timeout_seconds=1,
+            interval_seconds=0,
+            session=session,
+            sleep=lambda _: None,
+        )
+

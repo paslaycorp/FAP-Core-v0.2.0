@@ -16,6 +16,7 @@ from ops.render_release import (
     RenderAPI,
     deploy_commit_sha,
     require_env,
+    verify_rollback_health,
     verify_runtime_health,
     wait_for_live,
 )
@@ -127,6 +128,30 @@ def test_runtime_health_proves_exact_release_identity():
     ) == payload
 
 
+def test_rollback_health_proves_prior_release_identity():
+    sha = "7" * 40
+    payload = {
+        "status": "healthy",
+        "service": EXPECTED_SERVICE,
+        "version": "older-version-allowed-for-rollback-proof",
+        "git_commit": sha,
+        "git_branch": EXPECTED_BRANCH,
+        "git_repo_slug": EXPECTED_REPO_SLUG,
+        "render_service_id": DEFAULT_SERVICE_ID,
+    }
+    session = FakeSession([FakeResponse(payload)])
+
+    assert verify_rollback_health(
+        "https://example.test/health",
+        sha,
+        DEFAULT_SERVICE_ID,
+        timeout_seconds=1,
+        interval_seconds=0,
+        session=session,
+        sleep=lambda _: None,
+    ) == payload
+
+
 def test_runtime_health_rejects_wrong_sha(monkeypatch):
     wanted = "a" * 40
     payload = {
@@ -207,6 +232,18 @@ def test_release_rolls_back_previous_live_deploy_on_proof_failure(monkeypatch):
         render_release,
         "verify_runtime_health",
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("runtime proof failed")),
+    )
+    monkeypatch.setattr(
+        render_release,
+        "verify_rollback_health",
+        lambda *args, **kwargs: {
+            "status": "healthy",
+            "service": EXPECTED_SERVICE,
+            "git_commit": previous_sha,
+            "git_branch": EXPECTED_BRANCH,
+            "git_repo_slug": EXPECTED_REPO_SLUG,
+            "render_service_id": DEFAULT_SERVICE_ID,
+        },
     )
     monkeypatch.setattr(render_release, "write_attestation", lambda *args, **kwargs: None)
 

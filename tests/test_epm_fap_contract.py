@@ -5,6 +5,7 @@ import pytest
 from fap_core.artifact import Artifact, DeviceStamp, GeoStamp
 from fap_core.epm_contract import (
     BoundaryValidation,
+    CONTRACT_REVISION_SHA,
     CONTRACT_VERSION,
     EVIDENCE_SCHEMA_VERSION,
     EvidenceAttestation,
@@ -60,6 +61,7 @@ def test_receipt_is_bounded_and_does_not_promote_fap_score_or_verdict():
 
     assert receipt["schema_version"] == EVIDENCE_SCHEMA_VERSION
     assert receipt["contract_version"] == CONTRACT_VERSION
+    assert receipt["contract_revision_sha"] == CONTRACT_REVISION_SHA
     assert receipt["boundary_validation"]["validated"] is False
     assert receipt["producer"]["commit_sha"] == SHA
     assert "score" not in receipt
@@ -118,3 +120,7 @@ def test_receipt_rejects_observation_before_availability():
 def test_receipt_requires_exact_producer_commit():
     with pytest.raises(ValueError, match="40-character"):
         _receipt(producer_commit_sha="main")
+
+
+def test_contract_revision_is_exact_hardened_epm_revision():
+    assert CONTRACT_REVISION_SHA == "7b20cd45f32c40302388e6cd87c24aa2ab093c5e"

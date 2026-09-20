@@ -43,6 +43,7 @@ class VerifyResponse(BaseModel):
     audit_trail: List[Dict[str, Any]]
     recommendations: List[str]
     processed_at: datetime
+    evidence_receipt: Optional[Dict[str, Any]] = None
 
 
 class HealthResponse(BaseModel):

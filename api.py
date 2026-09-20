@@ -8,8 +8,9 @@ from fap_core import __version__
 from fap_core.artifact import Artifact, GeoStamp, DeviceStamp
 from fap_core.verify import VerificationPipeline
 from fap_core.scoring.score import quick_score
+from fap_core.epm_contract import EvidenceAttestation, evidence_receipt_from_artifact
 from fap_core.api_models import VerifyRequest, VerifyResponse, HealthResponse, EnrollRequest, EnrollResponse
-import os, hashlib
+import os, hashlib, re
 from datetime import datetime, timezone
 
 FAP_ENV = os.getenv("FAP_ENV", "development")
@@ -132,6 +133,25 @@ async def verify(request: Request, req: VerifyRequest, api_key: str = Depends(ve
     )
     pipeline = VerificationPipeline()
     artifact = pipeline.verify(artifact)
+    processed_at = datetime.now(timezone.utc)
+    evidence_receipt = None
+    producer_commit_sha = os.getenv("RENDER_GIT_COMMIT", "")
+    if re.fullmatch(r"[0-9a-f]{40}", producer_commit_sha):
+        provenance_ref = artifact.provenance_hash()
+        evidence_receipt = evidence_receipt_from_artifact(
+            artifact,
+            observed_at=processed_at,
+            available_at=artifact.created_at,
+            source="fap-core:verify",
+            attestation=EvidenceAttestation(
+                attestation_id=f"fap-core-verify:{artifact.artifact_id}:{producer_commit_sha}",
+                authority="fap-core",
+                method="verification-pipeline",
+                basis=provenance_ref,
+                validated=True,
+            ),
+            producer_commit_sha=producer_commit_sha,
+        )
     return VerifyResponse(
         artifact_id=artifact.artifact_id,
         verdict=artifact.verdict or "UNKNOWN",
@@ -141,7 +161,8 @@ async def verify(request: Request, req: VerifyRequest, api_key: str = Depends(ve
         provenance_hash=artifact.provenance_hash(),
         audit_trail=artifact.audit_trail,
         recommendations=[],
-        processed_at=datetime.now(timezone.utc)
+        processed_at=processed_at,
+        evidence_receipt=evidence_receipt,
     )
 
 @app.post("/enroll", response_model=EnrollResponse)

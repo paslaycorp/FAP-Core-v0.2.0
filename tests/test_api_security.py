@@ -50,3 +50,11 @@ def test_development_does_not_accept_hardcoded_dev_key(monkeypatch):
 def test_production_fails_closed_without_secret(monkeypatch):
     with pytest.raises(ValueError, match="FAP_API_KEY environment variable must be set in production"):
         load_api(monkeypatch, env="production")
+
+
+def test_authenticated_identity_requires_valid_service_credential(monkeypatch):
+    api = load_api(monkeypatch, api_key="service-secret")
+
+    assert api.verify_key(credentials("service-secret")) == "service-secret"
+    with pytest.raises(HTTPException):
+        api.verify_key(credentials("wrong-secret"))

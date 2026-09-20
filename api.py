@@ -112,6 +112,15 @@ async def demo():
 async def health():
     return HealthResponse(status="healthy", version=__version__, timestamp=datetime.now(timezone.utc))
 
+@app.get("/auth/check")
+async def auth_check(api_key: str = Depends(verify_key)):
+    """Authenticated runtime identity proof without mutating evidence state."""
+    return HealthResponse(
+        status="healthy",
+        version=__version__,
+        timestamp=datetime.now(timezone.utc),
+    )
+
 @app.post("/verify", response_model=VerifyResponse)
 @limiter.limit(FAP_RATE_LIMIT)
 async def verify(request: Request, req: VerifyRequest, api_key: str = Depends(verify_key)):

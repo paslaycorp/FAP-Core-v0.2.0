@@ -39,3 +39,11 @@ def test_release_requires_merge_commit_topology_and_exact_python():
     assert "Require merge-commit topology" in text
     assert 'if [[ "${#parts[@]}" -ne 3 ]]' in text
     assert 'python-version: "3.12.14"' in text
+
+
+def test_release_requires_authenticated_runtime_identity_secret():
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert 'FAP_API_KEY: ${{ secrets.FAP_API_KEY }}' in text
+    assert 'PRODUCTION_IDENTITY_URL: https://fap-core-odm4.onrender.com/auth/check' in text
+    assert "for name in RENDER_API_KEY FAP_API_KEY" in text

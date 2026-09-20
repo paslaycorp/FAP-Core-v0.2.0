@@ -25,8 +25,10 @@ jobs:
       url: https://fap-core-odm4.onrender.com
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      FAP_API_KEY: ${{ secrets.FAP_API_KEY }}
       RENDER_SERVICE_ID: srv-da8rfv8ae00c73bka16g
       PRODUCTION_HEALTH_URL: https://fap-core-odm4.onrender.com/health
+      PRODUCTION_IDENTITY_URL: https://fap-core-odm4.onrender.com/auth/check
 
     steps:
       - name: Resolve exact release SHA
@@ -143,11 +145,17 @@ jobs:
             exit 1
           fi
 
-      - name: Require production credential
+      - name: Require production credentials
         if: steps.freshness.outputs.eligible == 'true'
         run: |
-          if [[ -z "${RENDER_API_KEY:-}" ]]; then
-            echo "RENDER_API_KEY is missing from GitHub secrets." >&2
+          missing=0
+          for name in RENDER_API_KEY FAP_API_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "$name is missing from the protected GitHub production environment." >&2
+              missing=1
+            fi
+          done
+          if [[ "$missing" -ne 0 ]]; then
             echo "Release is fail-closed; nothing was deployed." >&2
             exit 1
           fi

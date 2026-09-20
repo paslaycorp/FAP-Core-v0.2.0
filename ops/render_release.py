@@ -22,6 +22,7 @@ import requests
 API_BASE = "https://api.render.com/v1"
 DEFAULT_SERVICE_ID = "srv-da8rfv8ae00c73bka16g"
 DEFAULT_HEALTH_URL = "https://fap-core-odm4.onrender.com/health"
+DEFAULT_IDENTITY_URL = "https://fap-core-odm4.onrender.com/auth/check"
 EXPECTED_REPO_SLUG = "paslaycorp/FAP-Core-v0.2.0"
 EXPECTED_BRANCH = "main"
 EXPECTED_SERVICE = "fap-core"
@@ -169,9 +170,10 @@ def wait_for_live(
 
 
 def verify_runtime_health(
-    health_url: str,
+    identity_url: str,
     release_sha: str,
     service_id: str,
+    api_key: str,
     *,
     timeout_seconds: int = 300,
     interval_seconds: int = 10,
@@ -185,8 +187,11 @@ def verify_runtime_health(
     while time.monotonic() < deadline:
         try:
             response = http.get(
-                health_url,
-                headers={"Cache-Control": "no-cache"},
+                identity_url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Cache-Control": "no-cache",
+                },
                 timeout=20,
             )
             response.raise_for_status()
@@ -300,9 +305,11 @@ def require_env(name: str) -> str:
 
 def release() -> ReleaseAttestation:
     token = require_env("RENDER_API_KEY")
+    fap_api_key = require_env("FAP_API_KEY")
     release_sha = require_env("RELEASE_SHA")
     service_id = os.getenv("RENDER_SERVICE_ID", DEFAULT_SERVICE_ID).strip()
     health_url = os.getenv("PRODUCTION_HEALTH_URL", DEFAULT_HEALTH_URL).strip()
+    identity_url = os.getenv("PRODUCTION_IDENTITY_URL", DEFAULT_IDENTITY_URL).strip()
     api = RenderAPI(token, service_id)
 
     previous = api.current_live_deploy()
@@ -378,9 +385,10 @@ def release() -> ReleaseAttestation:
             )
 
         attestation.runtime_health = verify_runtime_health(
-            health_url,
+            identity_url,
             release_sha,
             service_id,
+            fap_api_key,
         )
         attestation.result = "verified"
         attestation.verified_at = datetime.now(timezone.utc).isoformat()

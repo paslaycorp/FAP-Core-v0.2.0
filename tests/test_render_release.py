@@ -231,6 +231,7 @@ def test_release_rolls_back_previous_live_deploy_on_proof_failure(monkeypatch):
             return {"id": "dep-rollback"}
 
     monkeypatch.setenv("RENDER_API_KEY", "test-token")
+    monkeypatch.setenv("FAP_API_KEY", "test-fap-key")
     monkeypatch.setenv("RELEASE_SHA", release_sha)
     monkeypatch.setenv("RENDER_SERVICE_ID", DEFAULT_SERVICE_ID)
     monkeypatch.setattr(render_release, "RenderAPI", FakeAPI)

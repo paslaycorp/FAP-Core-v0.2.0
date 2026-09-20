@@ -123,6 +123,7 @@ def test_runtime_health_proves_exact_release_identity():
         "https://example.test/health",
         sha,
         DEFAULT_SERVICE_ID,
+        "test-fap-key",
         timeout_seconds=1,
         interval_seconds=0,
         session=session,
@@ -148,6 +149,7 @@ def test_rollback_health_proves_prior_release_identity():
         "https://example.test/health",
         sha,
         DEFAULT_SERVICE_ID,
+        "test-fap-key",
         timeout_seconds=1,
         interval_seconds=0,
         session=session,
@@ -176,6 +178,7 @@ def test_runtime_health_rejects_wrong_sha(monkeypatch):
             "https://example.test/health",
             wanted,
             DEFAULT_SERVICE_ID,
+            "test-fap-key",
             timeout_seconds=1,
             interval_seconds=0,
             session=session,
@@ -277,9 +280,40 @@ def test_runtime_health_rejects_nonproduction_environment(monkeypatch):
             "https://example.test/health",
             sha,
             DEFAULT_SERVICE_ID,
+            "test-fap-key",
             timeout_seconds=1,
             interval_seconds=0,
             session=session,
             sleep=lambda _: None,
         )
 
+
+
+def test_runtime_identity_proof_uses_bearer_credential():
+    sha = "6" * 40
+    payload = {
+        "status": "healthy",
+        "service": EXPECTED_SERVICE,
+        "version": EXPECTED_VERSION,
+        "git_commit": sha,
+        "git_branch": EXPECTED_BRANCH,
+        "git_repo_slug": EXPECTED_REPO_SLUG,
+        "render_service_id": DEFAULT_SERVICE_ID,
+        "environment": EXPECTED_ENVIRONMENT,
+    }
+    session = FakeSession([FakeResponse(payload)])
+
+    verify_runtime_health(
+        "https://example.test/auth/check",
+        sha,
+        DEFAULT_SERVICE_ID,
+        "secret-service-key",
+        timeout_seconds=1,
+        interval_seconds=0,
+        session=session,
+        sleep=lambda _: None,
+    )
+
+    _, url, kwargs = session.requests[0]
+    assert url == "https://example.test/auth/check"
+    assert kwargs["headers"]["Authorization"] == "Bearer secret-service-key"

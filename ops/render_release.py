@@ -26,6 +26,7 @@ EXPECTED_REPO_SLUG = "paslaycorp/FAP-Core-v0.2.0"
 EXPECTED_BRANCH = "main"
 EXPECTED_SERVICE = "fap-core"
 EXPECTED_VERSION = "0.2.0"
+EXPECTED_ENVIRONMENT = "production"
 TERMINAL_FAILURES = {
     "build_failed",
     "canceled",
@@ -198,6 +199,7 @@ def verify_runtime_health(
                 "branch": data.get("git_branch") == EXPECTED_BRANCH,
                 "repo": data.get("git_repo_slug") == EXPECTED_REPO_SLUG,
                 "render_service_id": data.get("render_service_id") == service_id,
+                "environment": data.get("environment") == EXPECTED_ENVIRONMENT,
             }
             if all(checks.values()):
                 return data
